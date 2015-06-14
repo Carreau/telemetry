@@ -20,19 +20,28 @@ import json
 import functools
 
 
-# for now just log out what we collect.
-log = logging.getLogger()
+import zmq
 
-# in progress, locaal counter.
+address = 'tcp://localhost:5555'
+context = zmq.Context()
+socket = context.socket(zmq.PUSH)
+socket.connect(address)
+
+
+socket.send(b'starting...')
+
+
+# for now just log out what we collect.
+
+
 import collections
-_d = collections.defaultdict(lambda :0)
+
+import hmac
+env_id = hmac.new(sys.version.encode('ascii')).hexdigest()[:8]
 
 
 def _collect(value):
-    _d[value] += 1
-    lvalue = _d[value]
-    if lvalue %10 == 0 :
-        log.critical('%s -- %s',value, lvalue)
+    socket.send(('%s|%s' % (env_id, value)).encode('ascii'))
 
 
 def collect_basic_info():
@@ -41,8 +50,9 @@ def collect_basic_info():
     """
 
     s = sys.version_info
-    _collect(json.dumps({'sys.version_info':s}))
+    _collect(json.dumps({'sys.version_info':tuple(s)}))
     _collect(sys.version)
+    return sys.version
 
 collect_basic_info()
 
@@ -67,7 +77,7 @@ def call(function):
     """
     decorator that collect function call count.
     """
-    message = 'call:%s.%s' % (function.__module__,function.__qualname__)
+    message = 'call:%s.%s' % (function.__module__,function.__name__)
     @functools.wraps(function)
     def wrapper(*args, **kwargs):
         _collect(message)
@@ -81,5 +91,5 @@ def call(function):
 def bar():
     pass
 
-for i in range(200):
+for i in range(20000):
     bar()
